@@ -103,45 +103,43 @@ export default function ListaReferencias() {
 
   // Toggle estado (activar/desactivar) — usa obtenerReferenciaPorId y actualizarReferencia desde el backend
   const toggleEstado = (ref: any) => {
-    Alert.alert(
-      ref.activo ? "Desactivar referencia" : "Activar referencia",
-      `¿Estás seguro de ${ref.activo ? "desactivar" : "activar"} "${ref.nombre}"?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Aceptar",
-          onPress: async () => {
-            setLoadingAccionId(ref.idReferencia);
-            try {
-              // obtenemos la referencia actual con idReferencia (string)
-              const referenciaActual = await obtenerReferenciaPorId(String(ref.idReferencia));
+  Alert.alert(
+    ref.activo ? "Desactivar referencia" : "Activar referencia",
+    `¿Estás seguro de ${ref.activo ? "desactivar" : "activar"} "${ref.nombre}"?`,
+    [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Aceptar",
+        onPress: async () => {
+          setLoadingAccionId(ref.idReferencia);
+          try {
 
-              const payload = {
-                ...referenciaActual,
-                activo: !referenciaActual.activo,
-              };
+            const payload = {
+              idReferencia: ref.idReferencia,
+              nombre: ref.nombre,
+              activo: !ref.activo,
+            };
 
-              // Llamada al service para actualizar:
-              // Para mantener separation of concerns, asumimos que existe la función:
-              await actualizarReferencia(ref.idReferencia, payload);
+            await actualizarReferencia(ref.idReferencia, payload);
 
-              Alert.alert(
-                "Éxito",
-                `Referencia ${payload.activo ? "activada" : "desactivada"} correctamente.`
-              );
+            Alert.alert(
+              "Éxito",
+              `Referencia ${payload.activo ? "activada" : "desactivada"} correctamente.`
+            );
 
-              await cargarReferencias();
-            } catch (error) {
-              console.error("Error al cambiar estado:", error);
-              Alert.alert("Error", "No se pudo cambiar el estado.");
-            } finally {
-              setLoadingAccionId(null);
-            }
-          },
+            await cargarReferencias();
+
+          } catch (error) {
+            console.error("Error al cambiar estado:", error);
+            Alert.alert("Error", "No se pudo cambiar el estado.");
+          } finally {
+            setLoadingAccionId(null);
+          }
         },
-      ]
-    );
-  };
+      },
+    ]
+  );
+};
 
   const renderReferencia = ({ item }: { item: any }) => (
     <View style={styles.card}>
