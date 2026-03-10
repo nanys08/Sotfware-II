@@ -83,6 +83,7 @@ export default function EditarUsuarioAdmin() {
 
       const datosActualizados: Record<string, any> = {
         nombre,
+        cedula,
         correo,
         rol: rol.toUpperCase(),
       };
