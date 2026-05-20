@@ -11,6 +11,7 @@ pr:
 variables:
   MAVEN_CACHE_FOLDER: $(Pipeline.Workspace)/.m2/repository
   MAVEN_OPTS: '-Dmaven.repo.local=$(MAVEN_CACHE_FOLDER)'
+  npm_config_cache: $(Pipeline.Workspace)/.npm
 
 jobs:
   - job: Backend
@@ -53,10 +54,10 @@ jobs:
     pool:
       vmImage: ubuntu-latest
     steps:
-      - task: NodeTool@0
+      - task: UseNode@1
         displayName: Install Node.js 20
         inputs:
-          versionSpec: '20.x'
+          version: '20.x'
 
       - task: Cache@2
         displayName: Cache npm
@@ -65,7 +66,7 @@ jobs:
           restoreKeys: |
             npm | "$(Agent.OS)"
             npm
-          path: ~/.npm
+          path: $(npm_config_cache)
 
       - script: npm ci
         workingDirectory: frontend/inventario-app
