@@ -95,6 +95,10 @@ public class ValidadorDatos {
             throw new IllegalArgumentException("El ID del repuesto no puede estar vacío.");
         }
 
+        if (!repuesto.getIdRepuesto().toUpperCase().startsWith("RE")) {
+            throw new IllegalArgumentException("El ID del repuesto debe iniciar con 'RE'.");
+        }
+
         if (repuesto.getNombre() == null || repuesto.getNombre().trim().isEmpty()) {
             throw new IllegalArgumentException("El nombre no puede estar vacío.");
         }

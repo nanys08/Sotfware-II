@@ -1,189 +1,258 @@
-// editarReferencia.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   TextInput,
-  Button,
+  TouchableOpacity,
   Alert,
   StyleSheet,
   Switch,
   ActivityIndicator,
+  Animated,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
+import Icon from "react-native-vector-icons/Ionicons";
+import { obtenerReferenciaPorId, editarReferencia } from "../../services/referenciaService";
 
-import {
-  obtenerReferenciaPorId
-} from "../../services/referenciaService"; // asegúrate ruta correcta
-
-import { editarReferencia } from "../../services/referenciaService";
-
+const PRIMARY = "#153cc7";
+const BG = "#f0f4ff";
 
 export default function EditarReferencia() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const idParam = Array.isArray(params.idReferencia) ? params.idReferencia[0] : (params.idReferencia as string | undefined);
+  const [originalId] = useState<string | null>(idParam ?? null);
 
-  // params.idReferencia es el que enviamos desde la lista
-  const idParam = Array.isArray(params.idReferencia)
-    ? params.idReferencia[0]
-    : (params.idReferencia as string | undefined);
+  const [idVisible, setIdVisible] = useState("");
+  const [nombre, setNombre] = useState("");
+  const [activo, setActivo] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  // -- estado --
-  // originalIdReferencia: IDENTIFICADOR que se usará para llamar al backend (NO editable)
-  const [originalIdReferencia, setOriginalIdReferencia] = useState<string | null>(
-    idParam ?? null
-  );
-
-  // campos del formulario (solo nombre y activo editables)
-  const [idReferenciaVisible, setIdReferenciaVisible] = useState<string>(""); // solo para mostrar
-  const [nombre, setNombre] = useState<string>("");
-  const [activo, setActivo] = useState<boolean>(true);
-
-  const [usuario, setUsuario] = useState<any | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const btnScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     const init = async () => {
-      // validar sesión
       const data = await AsyncStorage.getItem("usuario");
-      if (!data) {
-        Alert.alert("Sesión expirada", "Debes iniciar sesión.");
-        router.replace("/login");
-        return;
-      }
+      if (!data) { router.replace("/login"); return; }
       const user = JSON.parse(data);
-      if (user.rol !== "ADMIN") {
-        Alert.alert("Acceso denegado", "No tienes permisos para editar referencias.");
-        router.replace("/home");
-        return;
-      }
-      setUsuario(user);
-
-      // validar param
-      if (!originalIdReferencia) {
-        Alert.alert("Error", "ID de referencia no proporcionado.");
-        router.back();
-        return;
-      }
-
+      if (user.rol !== "ADMIN") { router.replace("/home"); return; }
+      if (!originalId) { Alert.alert("Error", "ID no proporcionado"); router.back(); return; }
       try {
         setLoading(true);
-        // obtener referencia desde backend (id como string)
-        const referencia = await obtenerReferenciaPorId(originalIdReferencia);
-        // llenar formulario (no permitimos editar el id en este caso)
-        setIdReferenciaVisible(referencia.idReferencia ?? originalIdReferencia);
-        setNombre(referencia.nombre ?? "");
-        setActivo(Boolean(referencia.activo));
-      } catch (err) {
-        console.error("Error cargando referencia:", err);
+        const ref = await obtenerReferenciaPorId(originalId);
+        setIdVisible(ref.idReferencia ?? originalId);
+        setNombre(ref.nombre ?? "");
+        setActivo(Boolean(ref.activo));
+        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+      } catch {
         Alert.alert("Error", "No se pudo cargar la referencia.");
         router.back();
       } finally {
         setLoading(false);
       }
     };
-
     init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [originalIdReferencia]);
+  }, [originalId]);
 
   const handleActualizar = async () => {
-    const nombreNorm = String(nombre || "").trim();
-
-    if (!nombreNorm) {
-      Alert.alert("Error", "El nombre de la referencia es obligatorio.");
-      return;
-    }
-
-    if (!originalIdReferencia) {
-      Alert.alert("Error", "ID original no disponible. Reabre la pantalla.");
-      return;
-    }
-
-    const payload = {
-      idReferencia: originalIdReferencia, // backend requiere idReferencia en payload (según tu Java)
-      nombre: nombreNorm,
-      activo: activo,
-    };
-
+    const nom = nombre.trim();
+    if (!nom) { Alert.alert("Error", "El nombre es obligatorio."); return; }
+    if (!originalId) { Alert.alert("Error", "ID original no disponible."); return; }
     try {
-      setLoading(true);
-      // Importante: pasar EXACTAMENTE originalIdReferencia (string)
-      console.log("Llamando a actualizarReferencia con id =", originalIdReferencia, "payload =", payload);
-      await editarReferencia(originalIdReferencia, payload);
-
-      Alert.alert("Éxito", "Referencia actualizada correctamente.");
-      // volver a la lista o la ruta que uses
-      router.push("/home");
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setSaving(true);
+      await editarReferencia(originalId, { idReferencia: originalId, nombre: nom, activo });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("¡Actualizada!", "Referencia actualizada correctamente.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
     } catch (error: any) {
-      console.error("Error al actualizar referencia:", error);
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data ||
-        error?.message ||
-        "No se pudo actualizar la referencia.";
-      Alert.alert("Error", String(message));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const msg = error?.response?.data ?? error?.message ?? "No se pudo actualizar.";
+      Alert.alert("Error", String(msg));
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  if (!usuario) {
+  if (loading) {
     return (
-      <View style={styles.container}>
-        <Text>Cargando usuario...</Text>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: BG }}>
+        <ActivityIndicator size="large" color={PRIMARY} />
+        <Text style={{ marginTop: 12, color: "#94a3b8" }}>Cargando referencia...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Editar Referencia</Text>
-
-      {loading ? (
-        <ActivityIndicator size="large" />
-      ) : (
-        <>
-          <Text style={{ marginBottom: 6 }}>ID de referencia (no editable)</Text>
-          <TextInput
-            value={idReferenciaVisible}
-            style={[styles.input, { backgroundColor: "#f0f0f0", color: "#333" }]}
-            editable={false}
-            selectTextOnFocus={false}
-          />
-
-          <Text style={{ marginBottom: 6 }}>Nombre</Text>
-          <TextInput
-            placeholder="Nombre de la referencia"
-            value={nombre}
-            onChangeText={setNombre}
-            style={styles.input}
-          />
-
-          <View style={styles.row}>
-            <Text style={styles.label}>Activo</Text>
-            <Switch value={activo} onValueChange={setActivo} />
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        <ScrollView style={{ flex: 1, backgroundColor: BG }} contentContainerStyle={{ paddingBottom: 50 }} keyboardShouldPersistTaps="handled">
+          {/* Header */}
+          <View style={styles.pageHeader}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }} activeOpacity={0.7}>
+              <Icon name="arrow-back-outline" size={24} color={PRIMARY} />
+            </TouchableOpacity>
+            <Text style={styles.pageTitle}>Editar Referencia</Text>
+            <View style={{ width: 32 }} />
           </View>
 
-          <Button title="Guardar cambios" onPress={handleActualizar} />
-        </>
-      )}
-    </View>
+          {/* ID banner */}
+          <View style={styles.idBanner}>
+            <Icon name="barcode-outline" size={18} color={PRIMARY} />
+            <Text style={styles.idText}>{idVisible}</Text>
+            <View style={[styles.statusDot, { backgroundColor: activo ? "#059669" : "#94a3b8" }]} />
+          </View>
+
+          {/* Formulario */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Datos de la referencia</Text>
+
+            <Text style={styles.label}>ID (no editable)</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: "#f1f5f9" }]}>
+              <Icon name="lock-closed-outline" size={16} color="#94a3b8" style={{ marginRight: 8 }} />
+              <Text style={{ flex: 1, color: "#94a3b8", fontSize: 15 }}>{idVisible}</Text>
+            </View>
+
+            <Text style={[styles.label, { marginTop: 16 }]}>Nombre</Text>
+            <View style={styles.inputWrapper}>
+              <Icon name="text-outline" size={18} color="#94a3b8" style={{ marginRight: 8 }} />
+              <TextInput
+                placeholder="Nombre de la referencia"
+                placeholderTextColor="#94a3b8"
+                value={nombre}
+                onChangeText={setNombre}
+                style={styles.input}
+              />
+            </View>
+
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Estado</Text>
+                <Text style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
+                  {activo ? "Referencia activa y disponible" : "Referencia desactivada"}
+                </Text>
+              </View>
+              <Switch
+                value={activo}
+                onValueChange={(v) => { Haptics.selectionAsync(); setActivo(v); }}
+                trackColor={{ false: "#e2e8f0", true: "#bfdbfe" }}
+                thumbColor={activo ? PRIMARY : "#94a3b8"}
+              />
+            </View>
+          </View>
+
+          <View style={{ marginHorizontal: 16, gap: 10 }}>
+            <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+              <TouchableOpacity
+                style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+                onPress={handleActualizar}
+                disabled={saving}
+                onPressIn={() => Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+                onPressOut={() => Animated.spring(btnScale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
+                activeOpacity={0.9}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Icon name="save-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.saveBtnText}>Guardar cambios</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()} activeOpacity={0.8}>
+              <Text style={styles.cancelBtnText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </Animated.View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: "center", backgroundColor: "#fff" },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 20, textAlign: "center" },
-  input: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: "#aaa",
-    padding: 10,
-    marginBottom: 12,
-    borderRadius: 5,
+  pageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e1e7f5",
+    marginBottom: 16,
+    elevation: 2,
   },
-  row: { flexDirection: "row", alignItems: "center", marginVertical: 12 },
-  label: { fontSize: 16, marginRight: 10 },
+  pageTitle: { fontSize: 18, fontWeight: "700", color: "#0f172a" },
+  idBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#eef2ff",
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  idText: { flex: 1, fontSize: 15, fontWeight: "700", color: PRIMARY },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    elevation: 2,
+    shadowColor: "#153cc7",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+  },
+  sectionTitle: { fontSize: 13, fontWeight: "700", color: "#94a3b8", marginBottom: 16, letterSpacing: 0.5, textTransform: "uppercase" },
+  label: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e1e7f5",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
+  },
+  input: { flex: 1, color: "#0f172a", fontSize: 15 },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  saveBtn: {
+    backgroundColor: PRIMARY,
+    borderRadius: 16,
+    height: 54,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  cancelBtn: { backgroundColor: "#f1f5f9", borderRadius: 16, height: 48, justifyContent: "center", alignItems: "center" },
+  cancelBtnText: { color: "#475569", fontSize: 15, fontWeight: "600" },
 });

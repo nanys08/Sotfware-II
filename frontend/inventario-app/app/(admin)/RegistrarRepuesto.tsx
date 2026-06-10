@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from "react";
-import * as ImagePicker from "expo-image-picker";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,227 +7,342 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  Image,
   ActivityIndicator,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import Icon from "react-native-vector-icons/Ionicons";
 import { Picker } from "@react-native-picker/picker";
+import { useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
+import Icon from "react-native-vector-icons/Ionicons";
+import { registrarRepuesto, obtenerReferenciasParaRepuesto } from "../../services/repuestoService";
 
-import { registrarRepuesto } from "../../services/repuestoService";
-import { obtenerReferencias } from "../../services/referenciaService";
+const PRIMARY = "#153cc7";
+const BG = "#f0f4ff";
 
-const obtenerFechaActual = () => {
-  const hoy = new Date();
-  return `${String(hoy.getDate()).padStart(2, "0")}/${String(
-    hoy.getMonth() + 1
-  ).padStart(2, "0")}/${hoy.getFullYear()}`;
-};
+const CALIDAD_OPTIONS = [
+  { label: "Nuevo", value: "NUEVO", icon: "star-outline" },
+  { label: "De segunda", value: "DE_SEGUNDA", icon: "refresh-outline" },
+];
+
+const ESTADO_OPTIONS = [
+  { label: "En bodega", value: "EN_BODEGA", color: PRIMARY },
+  { label: "Para reparar", value: "PARA_REPARAR", color: "#d97706" },
+  { label: "En reparación", value: "EN_REPARACION", color: "#7c3aed" },
+];
 
 export default function RegistrarRepuesto() {
+  const router = useRouter();
   const [idRepuesto, setIdRepuesto] = useState("");
   const [nombre, setNombre] = useState("");
-  const [fechaRegistro] = useState(obtenerFechaActual());
   const [cantidad, setCantidad] = useState("");
   const [calidad, setCalidad] = useState("NUEVO");
   const [marca, setMarca] = useState("");
   const [estado, setEstado] = useState("EN_BODEGA");
-
-  // NUEVO: lista de referencias
   const [referencias, setReferencias] = useState<any[]>([]);
-  const [idReferencia, setIdReferencia] = useState(""); // ya no se escribe, se selecciona
-
-  const [imagenPreview, setImagenPreview] = useState<string | null>(null);
+  const [idReferencia, setIdReferencia] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // CARGAR REFERENCIAS AL INICIAR
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const btnScale = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
-    const cargar = async () => {
-      try {
-        const data = await obtenerReferencias();
-        setReferencias(data); // debe ser una lista: [{idReferencia, nombre,...}]
-      } catch (err) {
-        console.error("Error cargando referencias:", err);
-        Alert.alert("Error", "No se pudieron cargar las referencias.");
-      }
-    };
-    cargar();
+    Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+    obtenerReferenciasParaRepuesto()
+      .then((data) => setReferencias(Array.isArray(data) ? data : []))
+      .catch(() => Alert.alert("Error", "No se pudieron cargar las referencias."));
   }, []);
 
-  const seleccionarImagen = async () => {
-    const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permiso.granted) {
-      Alert.alert("Permiso requerido", "Debes permitir acceso a la galería.");
-      return;
-    }
-    const resultado = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.7,
-    });
-
-    if ((resultado as any).canceled) return;
-
-    const uri = (resultado as any).assets?.[0]?.uri;
-    if (uri) setImagenPreview(uri);
-  };
-
   const resetForm = () => {
-    setIdRepuesto("");
-    setNombre("");
-    setCantidad("");
-    setCalidad("NUEVO");
-    setMarca("");
-    setEstado("EN_BODEGA");
-    setIdReferencia("");
-    setImagenPreview(null);
+    setIdRepuesto(""); setNombre(""); setCantidad(""); setCalidad("NUEVO");
+    setMarca(""); setEstado("EN_BODEGA"); setIdReferencia("");
   };
 
   const handleGuardar = async () => {
-    if (!idRepuesto.trim() || !nombre.trim() || !cantidad.trim() || !idReferencia) {
-      Alert.alert("Campos faltantes", "Completa todos los campos obligatorios.");
+    if (!idRepuesto.trim() || !nombre.trim() || !cantidad.trim() || !idReferencia || !marca.trim()) {
+      Alert.alert("Campos requeridos", "Completa todos los campos obligatorios.");
       return;
     }
-
     if (!idRepuesto.toUpperCase().startsWith("RE")) {
-      Alert.alert("Código inválido", 'El ID del repuesto debe iniciar con "RE".');
+      Alert.alert("ID inválido", 'El ID del repuesto debe iniciar con "RE".');
       return;
     }
-
     const cantidadNum = Number(cantidad);
     if (isNaN(cantidadNum) || cantidadNum < 0) {
       Alert.alert("Cantidad inválida", "Debe ser un número válido.");
       return;
     }
-
-    const payload = {
-      idRepuesto: idRepuesto.trim(),
-      nombre: nombre.trim(),
-      cantidad: cantidadNum,
-      calidad,
-      marca,
-      estado,
-      imagen: null,
-    };
-
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
-      const creado = await registrarRepuesto(idReferencia, payload);
-      setLoading(false);
-
-      Alert.alert("Éxito", `Repuesto ${creado.idRepuesto} creado correctamente.`);
+      const creado = await registrarRepuesto(idReferencia, {
+        idRepuesto: idRepuesto.trim().toUpperCase(),
+        nombre: nombre.trim(),
+        cantidad: cantidadNum,
+        calidad,
+        marca: marca.trim(),
+        estado,
+        imagen: null,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("¡Registrado!", `Repuesto ${creado.idRepuesto} creado correctamente.`);
       resetForm();
     } catch (err: any) {
-      setLoading(false);
-      console.error("Error registrar repuesto:", err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Error", err.message ?? "Error desconocido");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text style={styles.title}>Registrar Repuesto</Text>
-
-      {/* ID REpuesto */}
-      <Text style={styles.label}>ID Repuesto</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Ej: RE001"
-        value={idRepuesto}
-        onChangeText={(t) => setIdRepuesto(t.toUpperCase())}
-      />
-
-      {/* FECHA */}
-      <Text style={styles.label}>Fecha de Registro</Text>
-      <TextInput style={[styles.input, { backgroundColor: "#e5e7eb" }]} value={fechaRegistro} editable={false} />
-
-      {/* NOMBRE */}
-      <Text style={styles.label}>Nombre</Text>
-      <TextInput style={styles.input} value={nombre} onChangeText={setNombre} />
-
-      {/* CANTIDAD */}
-      <Text style={styles.label}>Cantidad</Text>
-      <TextInput
-        style={styles.input}
-        value={cantidad}
-        keyboardType="numeric"
-        onChangeText={(t) => setCantidad(t.replace(/[^0-9]/g, ""))}
-      />
-
-      {/* SELECTOR DE REFERENCIAS */}
-      <Text style={styles.label}>Referencia</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={idReferencia}
-          onValueChange={(value) => setIdReferencia(value)}
-          style={{ height: 45 }}
-        >
-          <Picker.Item label="Seleccione una referencia..." value="" />
-          {referencias.map((ref) => (
-            <Picker.Item
-              key={ref.idReferencia}
-              label={`${ref.idReferencia} - ${ref.nombre}`}
-              value={ref.idReferencia}
-            />
-          ))}
-        </Picker>
-      </View>
-
-      {/* MARCA */}
-      <Text style={styles.label}>Marca</Text>
-      <TextInput style={styles.input} value={marca} onChangeText={setMarca} />
-
-      {/* IMAGEN */}
-      <Text style={styles.label}>Imagen (no se guarda)</Text>
-      <View style={styles.imageContainer}>
-        {imagenPreview ? (
-          <Image source={{ uri: imagenPreview }} style={{ width: "100%", height: 200, borderRadius: 10 }} />
-        ) : (
-          <View style={styles.imagePlaceholder}>
-            <Icon name="image-outline" size={40} color="#9ca3af" />
-            <Text style={styles.helperText}>Aún no se selecciona imagen</Text>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 50 }} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.pageHeader}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }} activeOpacity={0.7}>
+              <Icon name="arrow-back-outline" size={24} color={PRIMARY} />
+            </TouchableOpacity>
+            <Text style={styles.pageTitle}>Registrar Repuesto</Text>
+            <View style={{ width: 32 }} />
           </View>
-        )}
-        <TouchableOpacity style={styles.buttonSecondary} onPress={seleccionarImagen}>
-          <Icon name="cloud-upload-outline" size={18} color="#111827" />
-          <Text style={styles.buttonSecondaryText}>Adjuntar imagen</Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* GUARDAR */}
-      <TouchableOpacity style={styles.buttonPrimary} onPress={handleGuardar} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonPrimaryText}>Guardar</Text>}
-      </TouchableOpacity>
-    </ScrollView>
+          {/* Sección ID y Nombre */}
+          <SectionCard title="Identificación">
+            <FormField label="ID Repuesto" hint='Debe iniciar con "RE"'>
+              <TextInput
+                style={styles.input}
+                placeholder="Ej: RE001"
+                placeholderTextColor="#94a3b8"
+                value={idRepuesto}
+                onChangeText={(t) => setIdRepuesto(t.toUpperCase())}
+                autoCapitalize="characters"
+              />
+            </FormField>
+            <FormField label="Nombre">
+              <TextInput
+                style={styles.input}
+                placeholder="Nombre del repuesto"
+                placeholderTextColor="#94a3b8"
+                value={nombre}
+                onChangeText={setNombre}
+              />
+            </FormField>
+            <FormField label="Marca">
+              <TextInput
+                style={styles.input}
+                placeholder="Ej: Bosch, Samsung..."
+                placeholderTextColor="#94a3b8"
+                value={marca}
+                onChangeText={setMarca}
+              />
+            </FormField>
+            <FormField label="Cantidad">
+              <TextInput
+                style={styles.input}
+                placeholder="0"
+                placeholderTextColor="#94a3b8"
+                value={cantidad}
+                keyboardType="numeric"
+                onChangeText={(t) => setCantidad(t.replace(/[^0-9]/g, ""))}
+              />
+            </FormField>
+          </SectionCard>
+
+          {/* Calidad */}
+          <SectionCard title="Calidad">
+            <View style={styles.chipsRow}>
+              {CALIDAD_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.chip, calidad === opt.value && styles.chipActive]}
+                  onPress={() => { Haptics.selectionAsync(); setCalidad(opt.value); }}
+                  activeOpacity={0.8}
+                >
+                  <Icon
+                    name={opt.icon}
+                    size={16}
+                    color={calidad === opt.value ? "#fff" : "#475569"}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.chipText, calidad === opt.value && styles.chipTextActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </SectionCard>
+
+          {/* Estado */}
+          <SectionCard title="Estado">
+            <View style={styles.chipsRow}>
+              {ESTADO_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.chip,
+                    estado === opt.value && { backgroundColor: opt.color, borderColor: opt.color },
+                  ]}
+                  onPress={() => { Haptics.selectionAsync(); setEstado(opt.value); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.chipText, estado === opt.value && styles.chipTextActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </SectionCard>
+
+          {/* Referencia */}
+          <SectionCard title="Referencia">
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={idReferencia}
+                onValueChange={(v) => setIdReferencia(v)}
+                style={{ height: 48, color: "#0f172a" }}
+              >
+                <Picker.Item label="Selecciona una referencia..." value="" color="#94a3b8" />
+                {referencias.map((ref) => (
+                  <Picker.Item
+                    key={ref.idReferencia}
+                    label={`${ref.idReferencia} · ${ref.nombre}`}
+                    value={ref.idReferencia}
+                  />
+                ))}
+              </Picker>
+            </View>
+          </SectionCard>
+
+          {/* Botón */}
+          <Animated.View style={{ transform: [{ scale: btnScale }], marginHorizontal: 16, marginTop: 8 }}>
+            <TouchableOpacity
+              style={[styles.saveBtn, loading && { opacity: 0.7 }]}
+              onPress={handleGuardar}
+              disabled={loading}
+              onPressIn={() =>
+                Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()
+              }
+              onPressOut={() =>
+                Animated.spring(btnScale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()
+              }
+              activeOpacity={0.9}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Icon name="save-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.saveBtnText}>Guardar repuesto</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+        </ScrollView>
+      </Animated.View>
+    </KeyboardAvoidingView>
   );
 }
 
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={sectionStyles.card}>
+      <Text style={sectionStyles.title}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function FormField({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <View style={{ marginBottom: 14 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
+        <Text style={sectionStyles.label}>{label}</Text>
+        {hint && <Text style={sectionStyles.hint}> · {hint}</Text>}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+const sectionStyles = StyleSheet.create({
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: "#153cc7",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+  },
+  title: { fontSize: 13, fontWeight: "700", color: "#94a3b8", marginBottom: 12, letterSpacing: 0.5, textTransform: "uppercase" },
+  label: { fontSize: 13, fontWeight: "600", color: "#374151" },
+  hint: { fontSize: 11, color: "#94a3b8" },
+});
+
 const styles = StyleSheet.create({
-
-  pickerContainer: {
-  backgroundColor: "#fff",
-  borderWidth: 1,
-  borderColor: "#ccc",
-  borderRadius: 8,
-  marginBottom: 12,
-  paddingHorizontal: 5,
-  height: 50,
-  justifyContent: "center",
-},
-
-  container: { flex: 1, backgroundColor: "#F4F6FA", padding: 16 },
-  title: { fontSize: 22, fontWeight: "bold", color: "#153cc7", marginBottom: 16 },
-  label: { fontSize: 14, color: "#374151", marginTop: 12, marginBottom: 4 },
-  helperText: { fontSize: 12, color: "#6b7280" },
-  input: { backgroundColor: "#fff", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#d1d5db" },
+  container: { flex: 1, backgroundColor: BG },
+  pageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e1e7f5",
+    marginBottom: 16,
+    elevation: 2,
+  },
+  pageTitle: { fontSize: 18, fontWeight: "700", color: "#0f172a" },
+  input: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e1e7f5",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 15,
+    color: "#0f172a",
+  },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: "#9ca3af", marginRight: 8, marginTop: 4 },
-  chipSelected: { backgroundColor: "#153cc7", borderColor: "#153cc7" },
-  chipText: { color: "#374151", fontSize: 14 },
-  chipTextSelected: { color: "#fff", fontWeight: "bold" },
-  imageContainer: { marginTop: 4, marginBottom: 8 },
-  imagePlaceholder: { borderRadius: 12, borderWidth: 1, borderColor: "#e5e7eb", backgroundColor: "#f9fafb", padding: 12, alignItems: "center", marginBottom: 8 },
-  buttonPrimary: { marginTop: 24, backgroundColor: "#153cc7", paddingVertical: 12, borderRadius: 10, alignItems: "center" },
-  buttonPrimaryText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
-  buttonSecondary: { marginTop: 4, backgroundColor: "#e5e7eb", paddingVertical: 10, borderRadius: 8, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 6 },
-  buttonSecondaryText: { color: "#111827", fontSize: 14 },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: "#e1e7f5",
+    backgroundColor: "#f8fafc",
+  },
+  chipActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  chipText: { fontSize: 13, color: "#475569", fontWeight: "600" },
+  chipTextActive: { color: "#fff" },
+  pickerWrapper: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e1e7f5",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  saveBtn: {
+    backgroundColor: PRIMARY,
+    borderRadius: 16,
+    height: 54,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 });

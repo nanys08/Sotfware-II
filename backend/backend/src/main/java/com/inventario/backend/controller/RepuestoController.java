@@ -98,4 +98,17 @@ public class RepuestoController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+
+    // ----------------------------
+    // ELIMINAR REPUESTO COMPLETO
+    // ----------------------------
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> eliminar(@PathVariable String id) {
+        try {
+            repuestoService.eliminarRepuesto(id);
+            return ResponseEntity.ok("Repuesto eliminado correctamente.");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

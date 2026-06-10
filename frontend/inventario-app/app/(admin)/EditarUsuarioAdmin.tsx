@@ -1,196 +1,274 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, Alert, StyleSheet } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { actualizarUsuario, obtenerUsuarioPorId } from '../../services/usuarioService';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  ActivityIndicator,
+  Animated,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
+import Icon from "react-native-vector-icons/Ionicons";
+import { actualizarUsuario, obtenerUsuarioPorId } from "../../services/usuarioService";
+
+const PRIMARY = "#153cc7";
+const BG = "#f0f4ff";
+
+const ROL_OPTIONS = [
+  { label: "Técnico", value: "TECNICO", icon: "construct-outline", color: "#059669" },
+  { label: "Admin",   value: "ADMIN",   icon: "shield-checkmark-outline", color: "#153cc7" },
+];
 
 export default function EditarUsuarioAdmin() {
   const router = useRouter();
   const { idUsuario } = useLocalSearchParams();
-  const [usuarioAdmin, setUsuarioAdmin] = useState<any>(null);
-  const [usuarioEditado, setUsuarioEditado] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
-  const [nombre, setNombre] = useState('');
-  const [cedula, setCedula] = useState('');
-  const [correo, setCorreo] = useState('');
-  const [contrasena, setContrasena] = useState('');
-  const [rol, setRol] = useState('');
+  const [nombre, setNombre] = useState("");
+  const [cedula, setCedula] = useState("");
+  const [correo, setCorreo] = useState("");
+  const [contrasena, setContrasena] = useState("");
+  const [rol, setRol] = useState("TECNICO");
 
-  // Verificar que el usuario sea ADMIN
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const btnScale = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
-    const verificarAcceso = async () => {
-      const data = await AsyncStorage.getItem('usuario');
-      if (!data) {
-        Alert.alert('Sesión expirada', 'Debes iniciar sesión nuevamente.');
-        router.replace('/login');
-        return;
-      }
+    const init = async () => {
+      const data = await AsyncStorage.getItem("usuario");
+      if (!data) { router.replace("/login"); return; }
       const user = JSON.parse(data);
-      if (user.rol !== 'ADMIN') {
-        Alert.alert('Acceso denegado', 'Solo los administradores pueden editar usuarios.');
-        router.replace('/home');
-        return;
-      }
-      setUsuarioAdmin(user);
-    };
-    verificarAcceso();
-  }, []);
+      if (user.rol !== "ADMIN") { router.replace("/home"); return; }
 
-  // Cargar datos del usuario a editar
-  useEffect(() => {
-    const cargarUsuario = async () => {
+      const id = Array.isArray(idUsuario) ? parseInt(idUsuario[0]) : parseInt(idUsuario as string);
+      if (isNaN(id)) { Alert.alert("Error", "ID inválido"); router.back(); return; }
+
       try {
-        if (!idUsuario) return;
-
-        const idValido =
-          Array.isArray(idUsuario) ? parseInt(idUsuario[0]) : parseInt(idUsuario as string);
-
-        if (isNaN(idValido)) return;
-
-        const data = await obtenerUsuarioPorId(idValido);
-
-        setUsuarioEditado(data);
-        setNombre(data.nombre);
-        setCedula(data.cedula.toString());
-        setCorreo(data.correo);
-        setRol(data.rol);
-      } catch (error) {
-        Alert.alert('Error', 'No se pudo cargar la información del usuario.');
+        const data2 = await obtenerUsuarioPorId(id);
+        setNombre(data2.nombre);
+        setCedula(data2.cedula?.toString());
+        setCorreo(data2.correo);
+        setRol(data2.rol ?? "TECNICO");
+        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+      } catch {
+        Alert.alert("Error", "No se pudo cargar el usuario.");
         router.back();
       } finally {
         setLoading(false);
       }
     };
-    cargarUsuario();
+    init();
   }, [idUsuario]);
 
-  // Actualizar usuario
   const handleActualizar = async () => {
     if (!nombre || !correo || !rol) {
-      Alert.alert('Error', 'Por favor llena todos los campos requeridos (excepto la contraseña).');
+      Alert.alert("Campos requeridos", "Nombre, correo y rol son obligatorios.");
       return;
     }
+    const id = Array.isArray(idUsuario) ? parseInt(idUsuario[0]) : parseInt(idUsuario as string);
+    if (isNaN(id)) { Alert.alert("Error", "ID inválido"); return; }
 
     try {
-      const idValido =
-        Array.isArray(idUsuario) ? parseInt(idUsuario[0]) : parseInt(idUsuario as string);
-
-      if (isNaN(idValido)) {
-        Alert.alert('Error', 'ID de usuario inválido.');
-        return;
-      }
-
-      const datosActualizados: Record<string, any> = {
-        nombre,
-        cedula,
-        correo,
-        rol: rol.toUpperCase(),
-      };
-
-      if (contrasena.trim() !== '') {
-        datosActualizados.contrasena = contrasena;
-      }
-
-      await actualizarUsuario(idValido, datosActualizados);
-      Alert.alert('Éxito', 'Usuario actualizado correctamente.');
-      router.push('/ListaUsuarios');
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setSaving(true);
+      const datos: Record<string, any> = { nombre, cedula, correo, rol: rol.toUpperCase() };
+      if (contrasena.trim()) datos.contrasena = contrasena;
+      await actualizarUsuario(id, datos);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("¡Actualizado!", "Usuario actualizado correctamente.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
     } catch (error: any) {
-      const mensajeError =
-        error.response?.data ||
-        error.response?.data?.message ||
-        'No se pudo actualizar el usuario.';
-
-      Alert.alert('Error', mensajeError);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const msg = error?.response?.data ?? error?.message ?? "No se pudo actualizar.";
+      Alert.alert("Error", String(msg));
+    } finally {
+      setSaving(false);
     }
   };
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <Text>Cargando usuario...</Text>
-      </View>
-    );
-  }
-
-  if (!usuarioEditado) {
-    return (
-      <View style={styles.container}>
-        <Text>No se encontró el usuario.</Text>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: BG }}>
+        <ActivityIndicator size="large" color={PRIMARY} />
+        <Text style={{ marginTop: 12, color: "#94a3b8" }}>Cargando usuario...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Editar Usuario</Text>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        <ScrollView style={{ flex: 1, backgroundColor: BG }} contentContainerStyle={{ paddingBottom: 50 }} keyboardShouldPersistTaps="handled">
+          <View style={styles.pageHeader}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }} activeOpacity={0.7}>
+              <Icon name="arrow-back-outline" size={24} color={PRIMARY} />
+            </TouchableOpacity>
+            <Text style={styles.pageTitle}>Editar Usuario</Text>
+            <View style={{ width: 32 }} />
+          </View>
 
-      <TextInput
-        placeholder="Nombre"
-        value={nombre}
-        onChangeText={setNombre}
-        style={styles.input}
-      />
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Datos personales</Text>
 
-      {/* 🚫 CÉDULA NO EDITABLE */}
-      <TextInput
-        placeholder="Cédula"
-        value={cedula}
-        editable={false}               // NO editable
-        selectTextOnFocus={false}      // No deja seleccionar
-        style={[styles.input, styles.disabledInput]} // Gris
-      />
+            <Text style={styles.label}>Cédula (no editable)</Text>
+            <View style={[styles.inputRow, { backgroundColor: "#f1f5f9" }]}>
+              <Icon name="lock-closed-outline" size={16} color="#94a3b8" style={{ marginRight: 8 }} />
+              <Text style={{ flex: 1, color: "#94a3b8", fontSize: 15 }}>{cedula}</Text>
+            </View>
 
-      <TextInput
-        placeholder="Correo"
-        value={correo}
-        onChangeText={setCorreo}
-        style={styles.input}
-      />
+            <Text style={[styles.label, { marginTop: 14 }]}>Nombre completo</Text>
+            <View style={styles.inputRow}>
+              <Icon name="person-outline" size={18} color="#94a3b8" style={{ marginRight: 8 }} />
+              <TextInput style={styles.input} placeholder="Nombre" placeholderTextColor="#94a3b8" value={nombre} onChangeText={setNombre} />
+            </View>
 
-      <TextInput
-        placeholder="Nueva contraseña (opcional)"
-        secureTextEntry
-        value={contrasena}
-        onChangeText={setContrasena}
-        style={styles.input}
-      />
+            <Text style={[styles.label, { marginTop: 14 }]}>Correo electrónico</Text>
+            <View style={styles.inputRow}>
+              <Icon name="mail-outline" size={18} color="#94a3b8" style={{ marginRight: 8 }} />
+              <TextInput style={styles.input} placeholder="correo@ejemplo.com" placeholderTextColor="#94a3b8" value={correo} onChangeText={setCorreo} keyboardType="email-address" autoCapitalize="none" />
+            </View>
 
-      <TextInput
-        placeholder="Rol (ADMIN o TECNICO)"
-        value={rol}
-        onChangeText={setRol}
-        style={styles.input}
-      />
+            <Text style={[styles.label, { marginTop: 14 }]}>Nueva contraseña (opcional)</Text>
+            <View style={styles.inputRow}>
+              <Icon name="lock-closed-outline" size={18} color="#94a3b8" style={{ marginRight: 8 }} />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Dejar en blanco para no cambiar"
+                placeholderTextColor="#94a3b8"
+                secureTextEntry={!showPass}
+                value={contrasena}
+                onChangeText={setContrasena}
+              />
+              <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                <Icon name={showPass ? "eye-off-outline" : "eye-outline"} size={20} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+          </View>
 
-      <View style={styles.buttonContainer}>
-        <Button title="Actualizar Usuario" onPress={handleActualizar} />
-      </View>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Rol del usuario</Text>
+            <View style={styles.rolRow}>
+              {ROL_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.rolCard, rol === opt.value && { borderColor: opt.color, backgroundColor: opt.color + "12" }]}
+                  onPress={() => { Haptics.selectionAsync(); setRol(opt.value); }}
+                  activeOpacity={0.8}
+                >
+                  <Icon name={opt.icon} size={28} color={rol === opt.value ? opt.color : "#94a3b8"} />
+                  <Text style={[styles.rolCardText, rol === opt.value && { color: opt.color, fontWeight: "700" }]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
 
-      <View style={{ marginTop: 10 }}>
-        <Button title="Cancelar" color="gray" onPress={() => router.push('/ListaUsuarios')} />
-      </View>
-    </View>
+          <View style={{ marginHorizontal: 16, gap: 10 }}>
+            <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+              <TouchableOpacity
+                style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+                onPress={handleActualizar}
+                disabled={saving}
+                onPressIn={() => Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+                onPressOut={() => Animated.spring(btnScale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
+                activeOpacity={0.9}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Icon name="save-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.saveBtnText}>Guardar cambios</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()} activeOpacity={0.8}>
+              <Text style={styles.cancelBtnText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </Animated.View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 15 },
-  input: {
-    width: '100%',
+  pageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e1e7f5",
+    marginBottom: 16,
+    elevation: 2,
+  },
+  pageTitle: { fontSize: 18, fontWeight: "700", color: "#0f172a" },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: "#153cc7",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+  },
+  sectionTitle: { fontSize: 13, fontWeight: "700", color: "#94a3b8", marginBottom: 16, letterSpacing: 0.5, textTransform: "uppercase" },
+  label: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 10,
-    marginVertical: 5,
-    borderRadius: 5,
+    borderColor: "#e1e7f5",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
   },
-  disabledInput: {
-    backgroundColor: '#eee',
-    color: '#666',
+  input: { flex: 1, color: "#0f172a", fontSize: 15 },
+  rolRow: { flexDirection: "row", gap: 12 },
+  rolCard: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#e1e7f5",
+    backgroundColor: "#f8fafc",
+    gap: 6,
   },
-  buttonContainer: {
-    width: '100%',
-    marginTop: 10,
+  rolCardText: { fontSize: 14, color: "#94a3b8", fontWeight: "600" },
+  saveBtn: {
+    backgroundColor: PRIMARY,
+    borderRadius: 16,
+    height: 54,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
+  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  cancelBtn: { backgroundColor: "#f1f5f9", borderRadius: 16, height: 48, justifyContent: "center", alignItems: "center" },
+  cancelBtnText: { color: "#475569", fontSize: 15, fontWeight: "600" },
 });

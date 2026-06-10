@@ -6,12 +6,7 @@ import com.inventario.backend.repository.RepuestoRepository;
 import com.inventario.backend.repository.ReferenciaRepository;
 import com.inventario.backend.utils.ValidadorDatos;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.*;
 import java.time.format.DateTimeFormatter;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -108,6 +103,15 @@ public class RepuestoService {
         rep.setCantidad(rep.getCantidad() - cantidadEliminar);
 
         return repuestoRepository.save(rep);
+    }
+
+    // -----------------------
+    // Eliminar repuesto completo
+    // -----------------------
+    public void eliminarRepuesto(String id) {
+        Repuesto rep = repuestoRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Repuesto no encontrado"));
+        repuestoRepository.delete(rep);
     }
 
     // -----------------------

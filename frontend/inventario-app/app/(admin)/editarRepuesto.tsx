@@ -1,232 +1,364 @@
-// frontend/inventario-app/app/(admin)/editarRepuesto.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
   TextInput,
-  Button,
   Alert,
   StyleSheet,
   ActivityIndicator,
   ScrollView,
   TouchableOpacity,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import { Picker } from "@react-native-picker/picker";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { obtenerRepuestoPorId, editarRepuesto } from "../../services/repuestoService";
+import * as Haptics from "expo-haptics";
+import Icon from "react-native-vector-icons/Ionicons";
+import { obtenerRepuestoPorId, editarRepuesto, obtenerReferenciasParaRepuesto } from "../../services/repuestoService";
+
+const PRIMARY = "#153cc7";
+const BG = "#f0f4ff";
+
+const CALIDAD_OPTIONS = [
+  { label: "Nuevo", value: "NUEVO", icon: "star-outline" },
+  { label: "De segunda", value: "DE_SEGUNDA", icon: "refresh-outline" },
+];
+
+const ESTADO_OPTIONS = [
+  { label: "En bodega",     value: "EN_BODEGA",     color: PRIMARY },
+  { label: "Para reparar",  value: "PARA_REPARAR",  color: "#d97706" },
+  { label: "En reparación", value: "EN_REPARACION", color: "#7c3aed" },
+];
 
 export default function EditarRepuesto() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const idParam = Array.isArray(params.id) ? params.id[0] : params.id;
-  const idRepuesto = String(idParam ?? "");
+  const idRepuesto = String(Array.isArray(params.id) ? params.id[0] : (params.id ?? ""));
 
+  const [cargando, setCargando] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [cargandoDatos, setCargandoDatos] = useState(true);
-
-  // campos
   const [nombre, setNombre] = useState("");
-  const [cantidad, setCantidad] = useState<string>("0");
-  const [calidad, setCalidad] = useState("");
+  const [cantidad, setCantidad] = useState("0");
+  const [calidad, setCalidad] = useState("NUEVO");
   const [marca, setMarca] = useState("");
-  const [estado, setEstado] = useState("");
-  const [idReferencia, setIdReferencia] = useState<string>("");
+  const [estado, setEstado] = useState("EN_BODEGA");
+  const [idReferencia, setIdReferencia] = useState("");
+  const [referencias, setReferencias] = useState<any[]>([]);
 
-  const opcionesCalidad = ["Nuevo", "De segunda"];
-  const opcionesEstado = ["En bodega", "Para reparar", "En reparación"];
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const btnScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    if (!idRepuesto) {
-      Alert.alert("Error", "Id de repuesto inválido");
-      router.back();
-      return;
-    }
+    if (!idRepuesto) { Alert.alert("Error", "ID inválido"); router.back(); return; }
     cargar();
   }, []);
 
   const cargar = async () => {
     try {
-      setCargandoDatos(true);
-      const rep = await obtenerRepuestoPorId(idRepuesto);
-
+      setCargando(true);
+      const [rep, refs] = await Promise.all([
+        obtenerRepuestoPorId(idRepuesto),
+        obtenerReferenciasParaRepuesto(),
+      ]);
       setNombre(rep.nombre ?? "");
       setCantidad(String(rep.cantidad ?? 0));
-      setCalidad(rep.calidad ?? "");
+      setCalidad(rep.calidad ?? "NUEVO");
       setMarca(rep.marca ?? "");
-      setEstado(rep.estado ?? "");
+      setEstado(rep.estado ?? "EN_BODEGA");
       setIdReferencia(rep.referencia?.idReferencia ?? "");
-    } catch (err) {
+      setReferencias(Array.isArray(refs) ? refs : []);
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    } catch {
       Alert.alert("Error", "No se pudo cargar el repuesto.");
       router.back();
     } finally {
-      setCargandoDatos(false);
+      setCargando(false);
     }
   };
 
   const handleGuardar = async () => {
-    if (!nombre.trim()) {
-      Alert.alert("Error", "Nombre obligatorio");
-      return;
-    }
-    if (!idReferencia.trim()) {
-      Alert.alert("Error", "El repuesto debe tener una referencia válida.");
-      return;
-    }
-    if (!calidad) {
-      Alert.alert("Error", "Seleccione la calidad.");
-      return;
-    }
-    if (!estado) {
-      Alert.alert("Error", "Seleccione el estado.");
-      return;
-    }
-
+    if (!nombre.trim()) { Alert.alert("Error", "El nombre es obligatorio."); return; }
+    if (!idReferencia) { Alert.alert("Error", "Selecciona una referencia."); return; }
+    if (!marca.trim()) { Alert.alert("Error", "La marca es obligatoria."); return; }
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
-
-      const payload = {
+      await editarRepuesto(idRepuesto, idReferencia, {
         idRepuesto,
         nombre: nombre.trim(),
         cantidad: Number(cantidad) || 0,
         calidad,
-        marca,
+        marca: marca.trim(),
         estado,
         imagen: null,
-      };
-
-      await editarRepuesto(idRepuesto, idReferencia.trim(), payload);
-
-      Alert.alert("Éxito", "Repuesto actualizado correctamente.");
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("¡Actualizado!", "Repuesto guardado correctamente.");
       router.back();
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Error al actualizar");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", err.message ?? "Error al actualizar");
     } finally {
       setLoading(false);
     }
   };
 
-  if (cargandoDatos) {
+  if (cargando) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
-        <Text>Cargando repuesto...</Text>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: BG }}>
+        <ActivityIndicator size="large" color={PRIMARY} />
+        <Text style={{ marginTop: 12, color: "#94a3b8" }}>Cargando repuesto...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Editar Repuesto</Text>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 50 }} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.pageHeader}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }} activeOpacity={0.7}>
+              <Icon name="arrow-back-outline" size={24} color={PRIMARY} />
+            </TouchableOpacity>
+            <Text style={styles.pageTitle}>Editar Repuesto</Text>
+            <View style={{ width: 32 }} />
+          </View>
 
-      <Text style={styles.label}>ID Repuesto</Text>
-      <TextInput value={idRepuesto} editable={false} style={[styles.input, { backgroundColor: "#eee" }]} />
+          {/* ID (solo lectura) */}
+          <View style={styles.idBanner}>
+            <Icon name="barcode-outline" size={18} color={PRIMARY} />
+            <Text style={styles.idText}>{idRepuesto}</Text>
+          </View>
 
-      <Text style={styles.label}>Nombre</Text>
-      <TextInput value={nombre} onChangeText={setNombre} style={styles.input} />
+          {/* Datos básicos */}
+          <SectionCard title="Datos básicos">
+            <FormField label="Nombre">
+              <TextInput
+                style={styles.input}
+                placeholder="Nombre del repuesto"
+                placeholderTextColor="#94a3b8"
+                value={nombre}
+                onChangeText={setNombre}
+              />
+            </FormField>
+            <FormField label="Marca">
+              <TextInput
+                style={styles.input}
+                placeholder="Ej: Bosch, Samsung..."
+                placeholderTextColor="#94a3b8"
+                value={marca}
+                onChangeText={setMarca}
+              />
+            </FormField>
+            <FormField label="Cantidad">
+              <TextInput
+                style={styles.input}
+                placeholder="0"
+                placeholderTextColor="#94a3b8"
+                value={cantidad}
+                keyboardType="numeric"
+                onChangeText={(t) => setCantidad(t.replace(/[^0-9]/g, ""))}
+              />
+            </FormField>
+          </SectionCard>
 
-      <Text style={styles.label}>Cantidad</Text>
-      <TextInput
-        value={cantidad}
-        onChangeText={setCantidad}
-        keyboardType="numeric"
-        style={styles.input}
-      />
+          {/* Calidad */}
+          <SectionCard title="Calidad">
+            <View style={styles.chipsRow}>
+              {CALIDAD_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.chip, calidad === opt.value && styles.chipActive]}
+                  onPress={() => { Haptics.selectionAsync(); setCalidad(opt.value); }}
+                  activeOpacity={0.8}
+                >
+                  <Icon name={opt.icon} size={16} color={calidad === opt.value ? "#fff" : "#475569"} style={{ marginRight: 6 }} />
+                  <Text style={[styles.chipText, calidad === opt.value && styles.chipTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </SectionCard>
 
-      {/* ----------------------- CALIDAD con botones -------------------------- */}
-      <Text style={styles.label}>Calidad</Text>
-      <View style={styles.row}>
-        {opcionesCalidad.map((item) => (
-          <TouchableOpacity
-            key={item}
-            style={[
-              styles.optionButton,
-              calidad === item && styles.optionSelected,
-            ]}
-            onPress={() => setCalidad(item)}
-          >
-            <Text
-              style={[
-                styles.optionText,
-                calidad === item && styles.optionTextSelected,
-              ]}
-            >
-              {item}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+          {/* Estado */}
+          <SectionCard title="Estado">
+            <View style={styles.chipsRow}>
+              {ESTADO_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.chip, estado === opt.value && { backgroundColor: opt.color, borderColor: opt.color }]}
+                  onPress={() => { Haptics.selectionAsync(); setEstado(opt.value); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.chipText, estado === opt.value && styles.chipTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </SectionCard>
 
-      <Text style={styles.label}>Marca</Text>
-      <TextInput value={marca} onChangeText={setMarca} style={styles.input} />
+          {/* Referencia */}
+          <SectionCard title="Referencia">
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={idReferencia}
+                onValueChange={(v) => setIdReferencia(v)}
+                style={{ height: 48, color: "#0f172a" }}
+              >
+                <Picker.Item label="Selecciona una referencia..." value="" color="#94a3b8" />
+                {referencias.map((ref) => (
+                  <Picker.Item key={ref.idReferencia} label={`${ref.idReferencia} · ${ref.nombre}`} value={ref.idReferencia} />
+                ))}
+              </Picker>
+            </View>
+          </SectionCard>
 
-      {/* ----------------------- ESTADO con botones --------------------------- */}
-      <Text style={styles.label}>Estado</Text>
-      <View style={styles.row}>
-        {opcionesEstado.map((item) => (
-          <TouchableOpacity
-            key={item}
-            style={[
-              styles.optionButton,
-              estado === item && styles.optionSelected,
-            ]}
-            onPress={() => setEstado(item)}
-          >
-            <Text
-              style={[
-                styles.optionText,
-                estado === item && styles.optionTextSelected,
-              ]}
-            >
-              {item}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+          {/* Botones */}
+          <View style={{ marginHorizontal: 16, gap: 10 }}>
+            <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+              <TouchableOpacity
+                style={[styles.saveBtn, loading && { opacity: 0.7 }]}
+                onPress={handleGuardar}
+                disabled={loading}
+                onPressIn={() => Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+                onPressOut={() => Animated.spring(btnScale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
+                activeOpacity={0.9}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Icon name="save-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.saveBtnText}>Guardar cambios</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
 
-      <Text style={styles.label}>Referencia (ID)</Text>
-      <TextInput
-        value={idReferencia}
-        onChangeText={setIdReferencia}
-        style={styles.input}
-      />
-
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 12 }} />
-      ) : (
-        <View style={{ marginTop: 14 }}>
-          <Button title="Guardar cambios" onPress={handleGuardar} />
-          <View style={{ height: 8 }} />
-          <Button title="Cancelar" color="#999" onPress={() => router.back()} />
-        </View>
-      )}
-    </ScrollView>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()} activeOpacity={0.8}>
+              <Text style={styles.cancelBtnText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </Animated.View>
+    </KeyboardAvoidingView>
   );
 }
 
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={sectionStyles.card}>
+      <Text style={sectionStyles.title}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View style={{ marginBottom: 14 }}>
+      <Text style={sectionStyles.label}>{label}</Text>
+      <View style={{ marginTop: 6 }}>{children}</View>
+    </View>
+  );
+}
+
+const sectionStyles = StyleSheet.create({
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: "#153cc7",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+  },
+  title: { fontSize: 13, fontWeight: "700", color: "#94a3b8", marginBottom: 12, letterSpacing: 0.5, textTransform: "uppercase" },
+  label: { fontSize: 13, fontWeight: "600", color: "#374151" },
+});
+
 const styles = StyleSheet.create({
-  container: { padding: 16 },
-  title: { fontSize: 20, fontWeight: "bold", marginBottom: 12 },
-  label: { fontSize: 14, fontWeight: "600", marginTop: 12 },
-  input: { borderWidth: 1, borderColor: "#ccc", padding: 10, borderRadius: 6, marginTop: 4 },
-  row: { flexDirection: "row", flexWrap: "wrap", marginTop: 8 },
-  optionButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+  container: { flex: 1, backgroundColor: BG },
+  pageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e1e7f5",
+    marginBottom: 16,
+    elevation: 2,
+  },
+  pageTitle: { fontSize: 18, fontWeight: "700", color: "#0f172a" },
+  idBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#eef2ff",
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  idText: { fontSize: 15, fontWeight: "700", color: PRIMARY },
+  input: {
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: "#aaa",
-    marginRight: 8,
-    marginBottom: 8,
+    borderColor: "#e1e7f5",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 15,
+    color: "#0f172a",
   },
-  optionSelected: {
-    backgroundColor: "#007bff",
-    borderColor: "#007bff",
+  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: "#e1e7f5",
+    backgroundColor: "#f8fafc",
   },
-  optionText: {
-    color: "#333",
-    fontSize: 13,
+  chipActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  chipText: { fontSize: 13, color: "#475569", fontWeight: "600" },
+  chipTextActive: { color: "#fff" },
+  pickerWrapper: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e1e7f5",
+    borderRadius: 12,
+    overflow: "hidden",
   },
-  optionTextSelected: {
-    color: "white",
-    fontWeight: "bold",
+  saveBtn: {
+    backgroundColor: PRIMARY,
+    borderRadius: 16,
+    height: 54,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
+  saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  cancelBtn: {
+    backgroundColor: "#f1f5f9",
+    borderRadius: 16,
+    height: 48,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cancelBtnText: { color: "#475569", fontSize: 15, fontWeight: "600" },
 });

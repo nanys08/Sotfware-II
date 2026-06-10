@@ -7,7 +7,8 @@ export interface Repuesto {
   marca: string;
   estado: string;
   imagen: string | null;
-  referencia:{
-  idReferencia: string;
-  }
+  referencia: {
+    idReferencia: string;
+    nombre?: string;
+  };
 }
