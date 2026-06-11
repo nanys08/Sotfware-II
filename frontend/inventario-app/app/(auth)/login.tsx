@@ -75,7 +75,7 @@ export default function Login() {
       router.replace({ pathname: '/home', params: { nombre: usuario.nombre, rol: usuario.rol } });
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      snack.show(error?.message || 'Cédula o contraseña incorrectos.');
+      snack.show(error?.response?.data || error?.message || 'Cédula o contraseña incorrectos.');
     } finally {
       setLoading(false);
     }
@@ -103,6 +103,7 @@ export default function Login() {
           onDismiss={snack.hide}
           duration={3500}
           style={{ backgroundColor: '#1e293b' }}
+          theme={{ colors: { inverseSurface: '#1e293b', inverseOnSurface: '#ffffff' } }}
         >
           {snack.message}
         </Snackbar>

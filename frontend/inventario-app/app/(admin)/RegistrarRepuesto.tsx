@@ -92,7 +92,7 @@ export default function RegistrarRepuesto() {
       router.back();
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      snack.show(err.message ?? "Error desconocido");
+      snack.show(err.response?.data || err.message || "Error desconocido");
     } finally {
       setLoading(false);
     }
@@ -250,6 +250,7 @@ export default function RegistrarRepuesto() {
         onDismiss={snack.hide}
         duration={3500}
         style={{ backgroundColor: '#1e293b' }}
+        theme={{ colors: { inverseSurface: '#1e293b', inverseOnSurface: '#ffffff' } }}
       >
         {snack.message}
       </Snackbar>

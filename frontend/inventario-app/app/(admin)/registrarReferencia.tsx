@@ -44,7 +44,7 @@ export default function RegistrarReferencia() {
       router.back();
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      snack.show(error?.message || "No se pudo crear la referencia.");
+      snack.show(error?.response?.data || error?.message || "No se pudo crear la referencia.");
     } finally {
       setLoading(false);
     }
@@ -126,6 +126,7 @@ export default function RegistrarReferencia() {
         onDismiss={snack.hide}
         duration={3500}
         style={{ backgroundColor: '#1e293b' }}
+        theme={{ colors: { inverseSurface: '#1e293b', inverseOnSurface: '#ffffff' } }}
       >
         {snack.message}
       </Snackbar>

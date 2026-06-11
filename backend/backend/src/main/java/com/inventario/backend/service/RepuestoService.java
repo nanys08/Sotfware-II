@@ -26,8 +26,6 @@ public class RepuestoService {
     // Registro 
     // -----------------------
     public Repuesto registrarRepuesto(Repuesto repuesto, String idReferencia) {
-        ValidadorDatos.validarRepuesto(repuesto);
-
         if (repuestoRepository.existsById(repuesto.getIdRepuesto())) {
             throw new RuntimeException("El ID del repuesto ya existe");
         }
@@ -36,6 +34,8 @@ public class RepuestoService {
             .orElseThrow(() -> new RuntimeException("Referencia no encontrada"));
 
         repuesto.setReferencia(ref);
+
+        ValidadorDatos.validarRepuesto(repuesto);
 
         // imagen ya no se guarda, se deja lo que venga en el JSON (null normalmente)
         repuesto.setFechaRegistro(LocalDateTime.now()

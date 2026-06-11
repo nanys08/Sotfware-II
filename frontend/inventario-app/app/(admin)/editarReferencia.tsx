@@ -181,6 +181,7 @@ export default function EditarReferencia() {
         onDismiss={snack.hide}
         duration={3500}
         style={{ backgroundColor: '#1e293b' }}
+        theme={{ colors: { inverseSurface: '#1e293b', inverseOnSurface: '#ffffff' } }}
       >
         {snack.message}
       </Snackbar>

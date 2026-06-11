@@ -1,15 +1,10 @@
 import { useState } from 'react';
 
 export function useSnackbar() {
-  const [visible, setVisible] = useState(false);
-  const [message, setMessage] = useState('');
+  const [state, setState] = useState({ visible: false, message: '' });
 
-  const show = (msg: string) => {
-    setMessage(msg);
-    setVisible(true);
-  };
+  const show = (msg: string) => setState({ visible: true, message: msg });
+  const hide = () => setState(s => ({ ...s, visible: false }));
 
-  const hide = () => setVisible(false);
-
-  return { visible, message, show, hide };
+  return { visible: state.visible, message: state.message, show, hide };
 }
