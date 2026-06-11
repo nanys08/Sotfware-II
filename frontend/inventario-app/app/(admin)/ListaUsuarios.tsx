@@ -10,11 +10,13 @@ import {
   Animated,
   Platform,
 } from "react-native";
+import { Snackbar } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Icon from "react-native-vector-icons/Ionicons";
 import { obtenerUsuarios, cambiarEstadoUsuario } from "../../services/usuarioService";
+import { useSnackbar } from "../../hooks/useSnackbar";
 
 const PRIMARY = "#153cc7";
 const BG = "#f0f4ff";
@@ -101,6 +103,7 @@ export default function ListaUsuarios() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingId, setLoadingId] = useState<any>(null);
+  const snack = useSnackbar();
 
   useEffect(() => { verificar(); }, []);
 
@@ -122,7 +125,7 @@ export default function ListaUsuarios() {
           : []
       );
     } catch {
-      Alert.alert("Error", "No se pudo cargar la lista de usuarios.");
+      snack.show("No se pudo cargar la lista de usuarios.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -131,29 +134,34 @@ export default function ListaUsuarios() {
 
   const toggleEstado = async (usuario: any) => {
     const accion = usuario.activo ? "desactivar" : "activar";
-    Alert.alert("Confirmar", `¿Seguro que deseas ${accion} a ${usuario.nombre}?`, [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Confirmar",
-        onPress: async () => {
-          setLoadingId(usuario.idUsuario);
-          setUsuarios((prev) =>
-            prev.map((u) => (u.idUsuario === usuario.idUsuario ? { ...u, activo: !usuario.activo } : u))
-          );
-          try {
-            await cambiarEstadoUsuario(usuario.idUsuario, !usuario.activo);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          } catch {
-            setUsuarios((prev) =>
-              prev.map((u) => (u.idUsuario === usuario.idUsuario ? { ...u, activo: usuario.activo } : u))
-            );
-            Alert.alert("Error", "No se pudo cambiar el estado del usuario.");
-          } finally {
-            setLoadingId(null);
-          }
-        },
-      },
-    ]);
+    const mensaje = `¿Seguro que deseas ${accion} a ${usuario.nombre}?`;
+
+    const ejecutar = async () => {
+      setLoadingId(usuario.idUsuario);
+      setUsuarios((prev) =>
+        prev.map((u) => (u.idUsuario === usuario.idUsuario ? { ...u, activo: !usuario.activo } : u))
+      );
+      try {
+        await cambiarEstadoUsuario(usuario.idUsuario, !usuario.activo);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {
+        setUsuarios((prev) =>
+          prev.map((u) => (u.idUsuario === usuario.idUsuario ? { ...u, activo: usuario.activo } : u))
+        );
+        snack.show("No se pudo cambiar el estado del usuario.");
+      } finally {
+        setLoadingId(null);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm(mensaje)) ejecutar();
+    } else {
+      Alert.alert("Confirmar", mensaje, [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Confirmar", onPress: ejecutar },
+      ]);
+    }
   };
 
   return (
@@ -208,6 +216,16 @@ export default function ListaUsuarios() {
           )}
         />
       )}
+
+      <Snackbar
+        visible={snack.visible}
+        onDismiss={snack.hide}
+        duration={3500}
+        style={{ backgroundColor: '#1e293b' }}
+        theme={{ colors: { inverseSurface: '#1e293b', inverseOnSurface: '#ffffff' } }}
+      >
+        {snack.message}
+      </Snackbar>
     </View>
   );
 }

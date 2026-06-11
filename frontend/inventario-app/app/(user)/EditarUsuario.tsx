@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   ActivityIndicator,
   Animated,
@@ -12,11 +11,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Snackbar } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Icon from "react-native-vector-icons/Ionicons";
 import { actualizarUsuario } from "../../services/usuarioService";
+import { useSnackbar } from "../../hooks/useSnackbar";
 
 const PRIMARY = "#153cc7";
 const BG = "#f0f4ff";
@@ -33,6 +34,7 @@ export default function EditarUsuario() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
+  const snack = useSnackbar();
 
   useEffect(() => {
     const cargar = async () => {
@@ -50,7 +52,7 @@ export default function EditarUsuario() {
 
   const handleGuardar = async () => {
     if (!nombre || !correo) {
-      Alert.alert("Campos requeridos", "Nombre y correo son obligatorios.");
+      snack.show("Nombre y correo son obligatorios.");
       return;
     }
     try {
@@ -61,12 +63,10 @@ export default function EditarUsuario() {
       const response = await actualizarUsuario(usuario.idUsuario, datos);
       await AsyncStorage.setItem("usuario", JSON.stringify(response));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("¡Actualizado!", "Tus datos se actualizaron correctamente.", [
-        { text: "OK", onPress: () => router.replace("/home") },
-      ]);
-    } catch {
+      router.replace("/home");
+    } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", "No se pudo actualizar la información.");
+      snack.show(err?.response?.data || err?.message || "No se pudo actualizar la información.");
     } finally {
       setSaving(false);
     }
@@ -167,6 +167,16 @@ export default function EditarUsuario() {
           </View>
         </ScrollView>
       </Animated.View>
+
+      <Snackbar
+        visible={snack.visible}
+        onDismiss={snack.hide}
+        duration={3500}
+        style={{ backgroundColor: '#1e293b' }}
+        theme={{ colors: { inverseSurface: '#1e293b', inverseOnSurface: '#ffffff' } }}
+      >
+        {snack.message}
+      </Snackbar>
     </KeyboardAvoidingView>
   );
 }

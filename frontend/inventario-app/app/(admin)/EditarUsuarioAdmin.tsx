@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   ActivityIndicator,
   Animated,
@@ -12,11 +11,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Snackbar } from "react-native-paper";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import Icon from "react-native-vector-icons/Ionicons";
 import { actualizarUsuario, obtenerUsuarioPorId } from "../../services/usuarioService";
+import { useSnackbar } from "../../hooks/useSnackbar";
 
 const PRIMARY = "#153cc7";
 const BG = "#f0f4ff";
@@ -41,6 +42,7 @@ export default function EditarUsuarioAdmin() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
+  const snack = useSnackbar();
 
   useEffect(() => {
     const init = async () => {
@@ -50,7 +52,7 @@ export default function EditarUsuarioAdmin() {
       if (user.rol !== "ADMIN") { router.replace("/home"); return; }
 
       const id = Array.isArray(idUsuario) ? parseInt(idUsuario[0]) : parseInt(idUsuario as string);
-      if (isNaN(id)) { Alert.alert("Error", "ID inválido"); router.back(); return; }
+      if (isNaN(id)) { snack.show("ID inválido"); router.back(); return; }
 
       try {
         const data2 = await obtenerUsuarioPorId(id);
@@ -60,7 +62,7 @@ export default function EditarUsuarioAdmin() {
         setRol(data2.rol ?? "TECNICO");
         Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
       } catch {
-        Alert.alert("Error", "No se pudo cargar el usuario.");
+        snack.show("No se pudo cargar el usuario.");
         router.back();
       } finally {
         setLoading(false);
@@ -71,11 +73,11 @@ export default function EditarUsuarioAdmin() {
 
   const handleActualizar = async () => {
     if (!nombre || !correo || !rol) {
-      Alert.alert("Campos requeridos", "Nombre, correo y rol son obligatorios.");
+      snack.show("Nombre, correo y rol son obligatorios.");
       return;
     }
     const id = Array.isArray(idUsuario) ? parseInt(idUsuario[0]) : parseInt(idUsuario as string);
-    if (isNaN(id)) { Alert.alert("Error", "ID inválido"); return; }
+    if (isNaN(id)) { snack.show("ID inválido"); return; }
 
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -84,13 +86,11 @@ export default function EditarUsuarioAdmin() {
       if (contrasena.trim()) datos.contrasena = contrasena;
       await actualizarUsuario(id, datos);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("¡Actualizado!", "Usuario actualizado correctamente.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      router.back();
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = error?.response?.data ?? error?.message ?? "No se pudo actualizar.";
-      Alert.alert("Error", String(msg));
+      snack.show(String(msg));
     } finally {
       setSaving(false);
     }
@@ -200,6 +200,16 @@ export default function EditarUsuarioAdmin() {
           </View>
         </ScrollView>
       </Animated.View>
+
+      <Snackbar
+        visible={snack.visible}
+        onDismiss={snack.hide}
+        duration={3500}
+        style={{ backgroundColor: '#1e293b' }}
+        theme={{ colors: { inverseSurface: '#1e293b', inverseOnSurface: '#ffffff' } }}
+      >
+        {snack.message}
+      </Snackbar>
     </KeyboardAvoidingView>
   );
 }

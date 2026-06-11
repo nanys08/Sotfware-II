@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   ActivityIndicator,
   Animated,
@@ -12,11 +11,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Snackbar } from "react-native-paper";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import Icon from "react-native-vector-icons/Ionicons";
 import { registrarUsuario } from "../../services/usuarioService";
+import { useSnackbar } from "../../hooks/useSnackbar";
 
 const PRIMARY = "#153cc7";
 const BG = "#f0f4ff";
@@ -38,6 +39,7 @@ export default function RegistrarUsuario() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
+  const snack = useSnackbar();
 
   useEffect(() => {
     const verificar = async () => {
@@ -52,20 +54,18 @@ export default function RegistrarUsuario() {
 
   const handleRegistrar = async () => {
     if (!nombre || !cedula || !correo || !contrasena) {
-      Alert.alert("Campos requeridos", "Por favor completa todos los campos.");
+      snack.show("Por favor completa todos los campos.");
       return;
     }
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
-      const response = await registrarUsuario({ nombre, cedula, correo, contrasena, rol: rolNuevo });
+      await registrarUsuario({ nombre, cedula, correo, contrasena, rol: rolNuevo });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("¡Registrado!", `Usuario ${response.nombre} creado correctamente.`, [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      router.back();
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.response?.data || error?.message || "No se pudo registrar el usuario.");
+      snack.show(error?.response?.data || error?.message || "No se pudo registrar el usuario.");
     } finally {
       setLoading(false);
     }
@@ -154,6 +154,16 @@ export default function RegistrarUsuario() {
           </View>
         </ScrollView>
       </Animated.View>
+
+      <Snackbar
+        visible={snack.visible}
+        onDismiss={snack.hide}
+        duration={3500}
+        style={{ backgroundColor: '#1e293b' }}
+        theme={{ colors: { inverseSurface: '#1e293b', inverseOnSurface: '#ffffff' } }}
+      >
+        {snack.message}
+      </Snackbar>
     </KeyboardAvoidingView>
   );
 }

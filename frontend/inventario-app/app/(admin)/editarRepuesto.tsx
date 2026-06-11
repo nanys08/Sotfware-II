@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  Alert,
   StyleSheet,
   ActivityIndicator,
   ScrollView,
@@ -12,11 +11,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Snackbar } from "react-native-paper";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Icon from "react-native-vector-icons/Ionicons";
 import { obtenerRepuestoPorId, editarRepuesto, obtenerReferenciasParaRepuesto } from "../../services/repuestoService";
+import { useSnackbar } from "../../hooks/useSnackbar";
 
 const PRIMARY = "#153cc7";
 const BG = "#f0f4ff";
@@ -49,9 +50,10 @@ export default function EditarRepuesto() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
+  const snack = useSnackbar();
 
   useEffect(() => {
-    if (!idRepuesto) { Alert.alert("Error", "ID inválido"); router.back(); return; }
+    if (!idRepuesto) { snack.show("ID inválido"); router.back(); return; }
     cargar();
   }, []);
 
@@ -71,7 +73,7 @@ export default function EditarRepuesto() {
       setReferencias(Array.isArray(refs) ? refs : []);
       Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
     } catch {
-      Alert.alert("Error", "No se pudo cargar el repuesto.");
+      snack.show("No se pudo cargar el repuesto.");
       router.back();
     } finally {
       setCargando(false);
@@ -79,9 +81,9 @@ export default function EditarRepuesto() {
   };
 
   const handleGuardar = async () => {
-    if (!nombre.trim()) { Alert.alert("Error", "El nombre es obligatorio."); return; }
-    if (!idReferencia) { Alert.alert("Error", "Selecciona una referencia."); return; }
-    if (!marca.trim()) { Alert.alert("Error", "La marca es obligatoria."); return; }
+    if (!nombre.trim()) { snack.show("El nombre es obligatorio."); return; }
+    if (!idReferencia) { snack.show("Selecciona una referencia."); return; }
+    if (!marca.trim()) { snack.show("La marca es obligatoria."); return; }
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
@@ -95,11 +97,10 @@ export default function EditarRepuesto() {
         imagen: null,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("¡Actualizado!", "Repuesto guardado correctamente.");
       router.back();
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", err.message ?? "Error al actualizar");
+      snack.show(err.response?.data || err.message || "Error al actualizar");
     } finally {
       setLoading(false);
     }
@@ -242,6 +243,16 @@ export default function EditarRepuesto() {
           </View>
         </ScrollView>
       </Animated.View>
+
+      <Snackbar
+        visible={snack.visible}
+        onDismiss={snack.hide}
+        duration={3500}
+        style={{ backgroundColor: '#1e293b' }}
+        theme={{ colors: { inverseSurface: '#1e293b', inverseOnSurface: '#ffffff' } }}
+      >
+        {snack.message}
+      </Snackbar>
     </KeyboardAvoidingView>
   );
 }

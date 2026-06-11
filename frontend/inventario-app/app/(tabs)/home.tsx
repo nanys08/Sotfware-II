@@ -64,7 +64,6 @@ export default function Home() {
             router.replace("/login");
           }
         } catch {
-          Alert.alert("Error", "No se pudo cargar el usuario");
           router.replace("/login");
         } finally {
           setLoading(false);
@@ -76,17 +75,18 @@ export default function Home() {
 
   const handleLogout = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert("Cerrar sesión", "¿Seguro que deseas salir?", [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Salir",
-        style: "destructive",
-        onPress: async () => {
-          await AsyncStorage.removeItem("usuario");
-          router.replace("/login");
-        },
-      },
-    ]);
+    const ejecutar = async () => {
+      await AsyncStorage.removeItem("usuario");
+      router.replace("/login");
+    };
+    if (Platform.OS === "web") {
+      if (window.confirm("¿Seguro que deseas cerrar sesión?")) ejecutar();
+    } else {
+      Alert.alert("Cerrar sesión", "¿Seguro que deseas salir?", [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Salir", style: "destructive", onPress: ejecutar },
+      ]);
+    }
   };
 
   const navTo = (route: string) => {
