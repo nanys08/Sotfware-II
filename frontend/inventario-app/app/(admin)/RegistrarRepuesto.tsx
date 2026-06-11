@@ -5,18 +5,19 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
   ScrollView,
   ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Snackbar } from "react-native-paper";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Icon from "react-native-vector-icons/Ionicons";
 import { registrarRepuesto, obtenerReferenciasParaRepuesto } from "../../services/repuestoService";
+import { useSnackbar } from "../../hooks/useSnackbar";
 
 const PRIMARY = "#153cc7";
 const BG = "#f0f4ff";
@@ -46,12 +47,13 @@ export default function RegistrarRepuesto() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
+  const snack = useSnackbar();
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
     obtenerReferenciasParaRepuesto()
       .then((data) => setReferencias(Array.isArray(data) ? data : []))
-      .catch(() => Alert.alert("Error", "No se pudieron cargar las referencias."));
+      .catch(() => snack.show("No se pudieron cargar las referencias."));
   }, []);
 
   const resetForm = () => {
@@ -61,22 +63,22 @@ export default function RegistrarRepuesto() {
 
   const handleGuardar = async () => {
     if (!idRepuesto.trim() || !nombre.trim() || !cantidad.trim() || !idReferencia || !marca.trim()) {
-      Alert.alert("Campos requeridos", "Completa todos los campos obligatorios.");
+      snack.show("Completa todos los campos obligatorios.");
       return;
     }
     if (!idRepuesto.toUpperCase().startsWith("RE")) {
-      Alert.alert("ID inválido", 'El ID del repuesto debe iniciar con "RE".');
+      snack.show('El ID del repuesto debe iniciar con "RE".');
       return;
     }
     const cantidadNum = Number(cantidad);
     if (isNaN(cantidadNum) || cantidadNum < 0) {
-      Alert.alert("Cantidad inválida", "Debe ser un número válido.");
+      snack.show("La cantidad debe ser un número válido.");
       return;
     }
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
-      const creado = await registrarRepuesto(idReferencia, {
+      await registrarRepuesto(idReferencia, {
         idRepuesto: idRepuesto.trim().toUpperCase(),
         nombre: nombre.trim(),
         cantidad: cantidadNum,
@@ -86,11 +88,11 @@ export default function RegistrarRepuesto() {
         imagen: null,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("¡Registrado!", `Repuesto ${creado.idRepuesto} creado correctamente.`);
       resetForm();
+      router.back();
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", err.message ?? "Error desconocido");
+      snack.show(err.message ?? "Error desconocido");
     } finally {
       setLoading(false);
     }
@@ -242,6 +244,15 @@ export default function RegistrarRepuesto() {
           </Animated.View>
         </ScrollView>
       </Animated.View>
+
+      <Snackbar
+        visible={snack.visible}
+        onDismiss={snack.hide}
+        duration={3500}
+        style={{ backgroundColor: '#1e293b' }}
+      >
+        {snack.message}
+      </Snackbar>
     </KeyboardAvoidingView>
   );
 }
