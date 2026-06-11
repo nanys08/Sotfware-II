@@ -11,11 +11,13 @@ import {
   Animated,
   Platform,
 } from "react-native";
+import { Snackbar } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Icon from "react-native-vector-icons/Ionicons";
 import { obtenerReferenciasActivas, obtenerReferenciasInactivas, actualizarReferencia } from "../../services/referenciaService";
+import { useSnackbar } from "../../hooks/useSnackbar";
 
 const PRIMARY = "#153cc7";
 const BG = "#f0f4ff";
@@ -92,6 +94,7 @@ export default function ListaReferencias() {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [mostrarActivas, setMostrarActivas] = useState(true);
   const tabAnim = useRef(new Animated.Value(0)).current;
+  const snack = useSnackbar();
 
   useEffect(() => { verificar(); }, []);
   useEffect(() => { cargar(); }, [mostrarActivas]);
@@ -114,7 +117,7 @@ export default function ListaReferencias() {
           : []
       );
     } catch {
-      Alert.alert("Error", "No se pudieron cargar las referencias");
+      snack.show("No se pudieron cargar las referencias");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -134,29 +137,29 @@ export default function ListaReferencias() {
 
   const toggleEstado = async (ref: any) => {
     const accion = ref.activo ? "desactivar" : "activar";
-    Alert.alert("Confirmar", `¿Seguro que deseas ${accion} "${ref.nombre}"?`, [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Confirmar",
-        onPress: async () => {
-          setLoadingId(ref.idReferencia);
-          setReferencias((prev) =>
-            prev.map((r) => (r.idReferencia === ref.idReferencia ? { ...r, activo: !r.activo } : r))
-          );
-          try {
-            await actualizarReferencia(ref.idReferencia, { ...ref, activo: !ref.activo });
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          } catch {
-            setReferencias((prev) =>
-              prev.map((r) => (r.idReferencia === ref.idReferencia ? { ...r, activo: ref.activo } : r))
-            );
-            Alert.alert("Error", "No se pudo actualizar la referencia");
-          } finally {
-            setLoadingId(null);
-          }
-        },
-      },
-    ]);
+    const mensaje = `¿Seguro que deseas ${accion} "${ref.nombre}"?`;
+
+    const ejecutarToggle = async () => {
+      setLoadingId(ref.idReferencia);
+      try {
+        await actualizarReferencia(ref.idReferencia, { ...ref, activo: !ref.activo });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setReferencias((prev) => prev.filter((r) => r.idReferencia !== ref.idReferencia));
+      } catch {
+        snack.show("No se pudo actualizar la referencia");
+      } finally {
+        setLoadingId(null);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm(mensaje)) ejecutarToggle();
+    } else {
+      Alert.alert("Confirmar", mensaje, [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Confirmar", onPress: ejecutarToggle },
+      ]);
+    }
   };
 
   const filtradas = referencias.filter((ref) => {
@@ -251,6 +254,15 @@ export default function ListaReferencias() {
           )}
         />
       )}
+
+      <Snackbar
+        visible={snack.visible}
+        onDismiss={snack.hide}
+        duration={3500}
+        style={{ backgroundColor: '#1e293b' }}
+      >
+        {snack.message}
+      </Snackbar>
     </View>
   );
 }

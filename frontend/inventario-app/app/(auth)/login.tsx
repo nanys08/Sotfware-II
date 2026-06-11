@@ -4,7 +4,6 @@ import {
   TextInput,
   Text,
   StyleSheet,
-  Alert,
   TouchableOpacity,
   ActivityIndicator,
   Animated,
@@ -12,11 +11,13 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import { Snackbar } from 'react-native-paper';
 import { loginUsuario } from '../../services/usuarioService';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useSnackbar } from '../../hooks/useSnackbar';
 
 const PRIMARY = '#153cc7';
 const BG = '#f0f4ff';
@@ -28,6 +29,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const router = useRouter();
+  const snack = useSnackbar();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
@@ -61,7 +63,7 @@ export default function Login() {
 
   const handleLogin = async () => {
     if (!cedula || !contrasena) {
-      Alert.alert('Campos requeridos', 'Por favor ingresa tu cédula y contraseña.');
+      snack.show('Por favor ingresa tu cédula y contraseña.');
       return;
     }
     try {
@@ -73,7 +75,7 @@ export default function Login() {
       router.replace({ pathname: '/home', params: { nombre: usuario.nombre, rol: usuario.rol } });
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Error de acceso', error?.message || 'Cédula o contraseña incorrectos.');
+      snack.show(error?.message || 'Cédula o contraseña incorrectos.');
     } finally {
       setLoading(false);
     }
@@ -95,6 +97,15 @@ export default function Login() {
             <Text style={styles.appSub}>Sistema de gestión de repuestos</Text>
           </Animated.View>
         </View>
+
+        <Snackbar
+          visible={snack.visible}
+          onDismiss={snack.hide}
+          duration={3500}
+          style={{ backgroundColor: '#1e293b' }}
+        >
+          {snack.message}
+        </Snackbar>
 
         {/* Card de login */}
         <Animated.View

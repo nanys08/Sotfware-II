@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   Switch,
   ActivityIndicator,
@@ -13,11 +12,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Snackbar } from "react-native-paper";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import Icon from "react-native-vector-icons/Ionicons";
 import { obtenerReferenciaPorId, editarReferencia } from "../../services/referenciaService";
+import { useSnackbar } from "../../hooks/useSnackbar";
 
 const PRIMARY = "#153cc7";
 const BG = "#f0f4ff";
@@ -36,6 +37,7 @@ export default function EditarReferencia() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
+  const snack = useSnackbar();
 
   useEffect(() => {
     const init = async () => {
@@ -43,7 +45,7 @@ export default function EditarReferencia() {
       if (!data) { router.replace("/login"); return; }
       const user = JSON.parse(data);
       if (user.rol !== "ADMIN") { router.replace("/home"); return; }
-      if (!originalId) { Alert.alert("Error", "ID no proporcionado"); router.back(); return; }
+      if (!originalId) { snack.show("ID no proporcionado"); router.back(); return; }
       try {
         setLoading(true);
         const ref = await obtenerReferenciaPorId(originalId);
@@ -52,7 +54,7 @@ export default function EditarReferencia() {
         setActivo(Boolean(ref.activo));
         Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
       } catch {
-        Alert.alert("Error", "No se pudo cargar la referencia.");
+        snack.show("No se pudo cargar la referencia.");
         router.back();
       } finally {
         setLoading(false);
@@ -63,20 +65,18 @@ export default function EditarReferencia() {
 
   const handleActualizar = async () => {
     const nom = nombre.trim();
-    if (!nom) { Alert.alert("Error", "El nombre es obligatorio."); return; }
-    if (!originalId) { Alert.alert("Error", "ID original no disponible."); return; }
+    if (!nom) { snack.show("El nombre es obligatorio."); return; }
+    if (!originalId) { snack.show("ID original no disponible."); return; }
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSaving(true);
       await editarReferencia(originalId, { idReferencia: originalId, nombre: nom, activo });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("¡Actualizada!", "Referencia actualizada correctamente.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      router.back();
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = error?.response?.data ?? error?.message ?? "No se pudo actualizar.";
-      Alert.alert("Error", String(msg));
+      snack.show(String(msg));
     } finally {
       setSaving(false);
     }
@@ -175,6 +175,15 @@ export default function EditarReferencia() {
           </View>
         </ScrollView>
       </Animated.View>
+
+      <Snackbar
+        visible={snack.visible}
+        onDismiss={snack.hide}
+        duration={3500}
+        style={{ backgroundColor: '#1e293b' }}
+      >
+        {snack.message}
+      </Snackbar>
     </KeyboardAvoidingView>
   );
 }

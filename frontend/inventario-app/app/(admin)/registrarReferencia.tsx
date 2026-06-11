@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   ActivityIndicator,
   Animated,
@@ -12,10 +11,12 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
+import { Snackbar } from "react-native-paper";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Icon from "react-native-vector-icons/Ionicons";
 import { registrarReferencia } from "../../services/referenciaService";
+import { useSnackbar } from "../../hooks/useSnackbar";
 
 const PRIMARY = "#153cc7";
 const BG = "#f0f4ff";
@@ -26,27 +27,24 @@ export default function RegistrarReferencia() {
   const [nombre, setNombre] = useState("");
   const [loading, setLoading] = useState(false);
   const btnScale = useRef(new Animated.Value(1)).current;
+  const snack = useSnackbar();
 
   const handleRegistrar = async () => {
     const id = idReferencia.trim().toUpperCase();
     const nom = nombre.trim();
     if (!id || !nom) {
-      Alert.alert("Campos requeridos", "Completa el ID y el nombre de la referencia.");
+      snack.show("Completa el ID y el nombre de la referencia.");
       return;
     }
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
-      const response = await registrarReferencia({ idReferencia: id, nombre: nom, activo: true });
+      await registrarReferencia({ idReferencia: id, nombre: nom, activo: true });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("¡Registrada!", `Referencia ${response?.idReferencia ?? id} creada correctamente.`, [
-        { text: "OK", onPress: () => router.back() },
-      ]);
-      setIdReferencia("");
-      setNombre("");
+      router.back();
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error?.message || "No se pudo crear la referencia.");
+      snack.show(error?.message || "No se pudo crear la referencia.");
     } finally {
       setLoading(false);
     }
@@ -122,6 +120,15 @@ export default function RegistrarReferencia() {
           </Animated.View>
         </View>
       </ScrollView>
+
+      <Snackbar
+        visible={snack.visible}
+        onDismiss={snack.hide}
+        duration={3500}
+        style={{ backgroundColor: '#1e293b' }}
+      >
+        {snack.message}
+      </Snackbar>
     </KeyboardAvoidingView>
   );
 }
