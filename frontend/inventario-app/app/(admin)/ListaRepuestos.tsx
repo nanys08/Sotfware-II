@@ -12,11 +12,13 @@ import {
   Platform,
   Animated,
 } from "react-native";
+import { Snackbar } from "react-native-paper";
 import Icon from "react-native-vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Repuesto } from "../../types/repuesto";
 import { listarRepuestos, eliminarCantidadRepuesto } from "../../services/repuestoService";
+import { useSnackbar } from "../../hooks/useSnackbar";
 
 const PRIMARY = "#153cc7";
 const BG = "#f0f4ff";
@@ -135,6 +137,7 @@ const ListaRepuestos = () => {
   const [selectedRepuesto, setSelectedRepuesto] = useState<Repuesto | null>(null);
   const [cantidadEliminar, setCantidadEliminar] = useState("");
   const modalAnim = useRef(new Animated.Value(0)).current;
+  const snack = useSnackbar();
 
   useEffect(() => { cargar(); }, []);
 
@@ -145,7 +148,7 @@ const ListaRepuestos = () => {
       const data = await listarRepuestos();
       setRepuestos(Array.isArray(data) ? data : []);
     } catch {
-      Alert.alert("Error", "No se pudieron cargar los repuestos");
+      snack.show("No se pudieron cargar los repuestos");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -179,31 +182,32 @@ const ListaRepuestos = () => {
     if (!selectedRepuesto) return;
     const n = parseInt(cantidadEliminar, 10);
     if (isNaN(n) || n <= 0) {
-      Alert.alert("Cantidad inválida", "Ingresa un número mayor que 0");
+      snack.show("Ingresa un número mayor que 0");
       return;
     }
-    Alert.alert(
-      "Confirmar",
-      `¿Eliminar ${n} unidad(es) de "${selectedRepuesto.nombre}"?`,
-      [
+
+    const mensaje = `¿Eliminar ${n} unidad(es) de "${selectedRepuesto.nombre}"?`;
+
+    const ejecutar = async () => {
+      try {
+        cerrarModal();
+        await eliminarCantidadRepuesto(selectedRepuesto.idRepuesto, n);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        snack.show(`Se eliminaron ${n} unidad(es).`);
+        cargar(true);
+      } catch (err: any) {
+        snack.show(err.response?.data || err.message || "No se pudo eliminar");
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm(mensaje)) ejecutar();
+    } else {
+      Alert.alert("Confirmar", mensaje, [
         { text: "Cancelar", style: "cancel" },
-        {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              cerrarModal();
-              await eliminarCantidadRepuesto(selectedRepuesto.idRepuesto, n);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert("Listo", `Se eliminaron ${n} unidad(es).`);
-              cargar(true);
-            } catch (err: any) {
-              Alert.alert("Error", err.message ?? "No se pudo eliminar");
-            }
-          },
-        },
-      ]
-    );
+        { text: "Eliminar", style: "destructive", onPress: ejecutar },
+      ]);
+    }
   };
 
   const datos = filtrar();
@@ -296,6 +300,16 @@ const ListaRepuestos = () => {
           )}
         />
       )}
+
+      <Snackbar
+        visible={snack.visible}
+        onDismiss={snack.hide}
+        duration={3500}
+        style={{ backgroundColor: '#1e293b' }}
+        theme={{ colors: { inverseSurface: '#1e293b', inverseOnSurface: '#ffffff' } }}
+      >
+        {snack.message}
+      </Snackbar>
 
       {/* Modal eliminar cantidad */}
       <Modal visible={modalVisible} transparent animationType="none">
