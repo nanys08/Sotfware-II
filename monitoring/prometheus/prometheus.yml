@@ -1,0 +1,25 @@
+# ============================================================
+# Prometheus - Configuracion de recoleccion (scraping)
+# Recolecta las metricas que el backend Spring Boot expone en
+# /actuator/prometheus cada 5 segundos.
+# ============================================================
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  external_labels:
+    proyecto: 'sistema-inventario'
+
+scrape_configs:
+  # --- El propio Prometheus (auto-monitoreo) ---
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # --- Backend Spring Boot (a traves de Actuator/Micrometer) ---
+  - job_name: 'inventario-backend'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['backend:8080']
+        labels:
+          aplicacion: 'inventario-backend'
+          entorno: 'demo'

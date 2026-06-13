@@ -1,0 +1,8 @@
+target/
+.git/
+.idea/
+*.iml
+node_modules/
+package-lock.json
+*.log
+desktop.ini

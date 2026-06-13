@@ -1,0 +1,79 @@
+# ============================================================
+# Stack DevOps del Sistema de Inventario
+# ------------------------------------------------------------
+#   backend     -> API Spring Boot (expone metricas en /actuator/prometheus)
+#   prometheus  -> Recolecta las metricas del backend
+#   grafana     -> Grafica las metricas (dashboard ya provisionado)
+#
+# Uso:
+#   docker compose up -d --build
+#
+# Accesos:
+#   Backend     -> http://localhost:8080/actuator/health
+#   Prometheus  -> http://localhost:9090
+#   Grafana     -> http://localhost:3000   (usuario: admin / clave: admin)
+# ============================================================
+services:
+
+  backend:
+    build:
+      context: ./backend/backend
+    image: inventario-backend:latest
+    container_name: inventario-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - devops-net
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: inventario-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - backend
+    networks:
+      - devops-net
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: inventario-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - devops-net
+    restart: unless-stopped
+
+networks:
+  devops-net:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
